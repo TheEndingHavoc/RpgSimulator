@@ -1,4 +1,11 @@
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
+end)
+
+if not success or not Rayfield then
+    warn("Failed to load Rayfield library: " .. tostring(Rayfield))
+    return
+end
 
 -- Services
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -13,22 +20,23 @@ local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 local currentHRP = nil -- Will track current HumanoidRootPart
 
--- Create the window
-local Window = Fluent:CreateWindow({
-    Title = "RPG Simulator Pro",
-    SubTitle = "Respawn-Proof Auto Farm",
-    TabWidth = 160,
-    Size = UDim2.new(0, 500, 0, 400),
-    Theme = "Dark",
-    Acrylic = true,
-    MinimizeKey = Enum.KeyCode.LeftControl
+-- Create the window with configuration saving
+local Window = Rayfield:CreateWindow({
+    Name = "RPG Simulator Pro",
+    LoadingTitle = "RPG Simulator Pro",
+    LoadingSubtitle = "Respawn-Proof Auto Farm",
+    ConfigurationSaving = {
+        Enabled = true,
+        FileName = "RPGSim_Configs"
+    },
+    KeySystem = false
 })
 
 -- Add tabs
-local AutoSkillsTab = Window:AddTab({Title = "Auto Skills", Icon = "rbxassetid://10734949809"})
-local AutoFarmTab = Window:AddTab({Title = "Auto Farm", Icon = "rbxassetid://10734949809"})
-local AutoRaidTab = Window:AddTab({Title = "Auto Raid", Icon = "rbxassetid://10734949809"})
-local AutoSettingsTab = Window:AddTab({Title = "Settings", Icon = "rbxassetid://10734949809"})
+local AutoSkillsTab = Window:CreateTab("Auto Skills", nil)
+local AutoFarmTab = Window:CreateTab("Auto Farm", nil)
+local AutoRaidTab = Window:CreateTab("Auto Raid", nil)
+local AutoSettingsTab = Window:CreateTab("Settings", nil)
 
 -- Shared variables
 local isAutoSkillsEnabled = false
@@ -251,7 +259,7 @@ local function startFarming()
     farmingThread = coroutine.create(farmLoop)
     coroutine.resume(farmingThread)
     
-    Fluent:Notify({
+    Rayfield:Notify({
         Title = "Auto Farm",
         Content = "Enabled! Will survive respawns automatically.",
         Duration = 3
@@ -290,7 +298,7 @@ local function teleportToRaid()
     
     if raidEvent then
         raidEvent:FireServer(unpack(args))
-        Fluent:Notify({
+        Rayfield:Notify({
             Title = "Raid Teleport",
             Content = "Teleporting to "..selectedRaid..(isHardcoreRaid and " (Hardcore)" or ""),
             Duration = 3
@@ -357,17 +365,9 @@ local function raidLoop()
                     lastTeleport = now
                 end
                 
-                -- Attack sequence
-                simulateMouseClick()
-                
-                -- Use skills every 2 attacks
-                if math.random(1, 2) == 1 then
-                    for _, key in ipairs(keySequence) do
-                        if selectedKeys[key] then
-                            simulateKeyPress(key)
-                        end
-                    end
-                end
+                -- Built-in Auto Click and Auto Skills for Auto Raid
+                autoClick()
+                keySpam()
                 
                 task.wait(0.1)
             end
@@ -391,7 +391,7 @@ local function startRaid()
     raidThread = coroutine.create(raidLoop)
     coroutine.resume(raidThread)
     
-    Fluent:Notify({
+    Rayfield:Notify({
         Title = "Auto Raid",
         Content = "Enabled! Will survive respawns automatically.",
         Duration = 3
@@ -410,8 +410,6 @@ end
 
 -- Auto Skills function
 local function keySpam()
-    if not isAutoSkillsEnabled then return end
-    
     local currentKey = keySequence[currentKeyIndex]
     if selectedKeys[currentKey] then
         simulateKeyPress(currentKey)
@@ -423,7 +421,6 @@ end
 
 -- Auto Click function
 local function autoClick()
-    if not isAutoClickEnabled then return end
     simulateMouseClick()
     task.wait(clickDelay)
 end
@@ -449,7 +446,7 @@ local function toggleAutoClick(enabled)
         clickConnection:Disconnect()
         clickConnection = nil
     end
-    Fluent:Notify({
+    Rayfield:Notify({
         Title = "Auto Click",
         Content = enabled and "Enabled (Press F)" or "Disabled",
         Duration = 3
@@ -533,7 +530,7 @@ local function loadSettings(settings)
     autoLoadConfig = settings.Settings.AutoLoadConfig or false
     selectedConfig = settings.Settings.SelectedConfig
     
-    Fluent:Notify({
+    Rayfield:Notify({
         Title = "Config Loaded",
         Content = "Settings applied successfully!",
         Duration = 3
@@ -561,7 +558,7 @@ end
 
 local function saveConfig(name)
     if not name or name == "" then 
-        Fluent:Notify({
+        Rayfield:Notify({
             Title = "Error",
             Content = "Config name cannot be empty!",
             Duration = 3
@@ -584,18 +581,16 @@ local function saveConfig(name)
     end)
     
     if success then
-        Fluent:Notify({
+        Rayfield:Notify({
             Title = "Config Saved",
             Content = "Configuration '"..name.."' saved successfully!",
             Duration = 3
         })
         configsList = getConfigsList()
         -- Update dropdown
-        AutoSettingsTab:UpdateDropdown("ConfigSelector", {
-            Values = configsList
-        })
+        configDropdown:Set(configsList)
     else
-        Fluent:Notify({
+        Rayfield:Notify({
             Title = "Error",
             Content = "Failed to save config: "..tostring(err),
             Duration = 5
@@ -616,7 +611,7 @@ local function loadConfig(name)
         loadSettings(err)
         selectedConfig = name
     else
-        Fluent:Notify({
+        Rayfield:Notify({
             Title = "Error",
             Content = "Failed to load config: "..tostring(err),
             Duration = 5
@@ -633,7 +628,7 @@ local function deleteConfig(name)
     end)
     
     if success then
-        Fluent:Notify({
+        Rayfield:Notify({
             Title = "Config Deleted",
             Content = "Configuration '"..name.."' removed!",
             Duration = 3
@@ -643,11 +638,9 @@ local function deleteConfig(name)
             selectedConfig = nil
         end
         -- Update dropdown
-        AutoSettingsTab:UpdateDropdown("ConfigSelector", {
-            Values = configsList
-        })
+        configDropdown:Set(configsList)
     else
-        Fluent:Notify({
+        Rayfield:Notify({
             Title = "Error",
             Content = "Failed to delete config: "..tostring(err),
             Duration = 5
@@ -667,7 +660,7 @@ local function setupAutoExecute()
             if teleportState == Enum.TeleportState.Started then
                 queue_on_teleport([[
                     wait(1)
-                    loadstring(game:HttpGet("YOUR_SCRIPT_URL_HERE"))()
+                    loadstring(game:HttpGet("https://raw.githubusercontent.com/TheEndingHavoc/RpgSimulator/refs/heads/main/RPG%20Simulator.txt"))()
                 ]])
             end
         end)
@@ -679,18 +672,20 @@ configsList = getConfigsList()
 
 -- UI Elements
 -- Auto Skills Tab
-AutoSkillsTab:AddToggle("AutoSkillsToggle", {
-    Title = "Auto Skills",
-    Description = "Spams Q, E, R in sequence",
-    Default = false,
+AutoSkillsTab:CreateToggle({
+    Name = "Auto Skills",
+    Info = "Spams Q, E, R in sequence",
+    CurrentValue = false,
+    Flag = "AutoSkillsToggle",
     Callback = toggleKeySpam
 })
 
-AutoSkillsTab:AddDropdown("KeyFilter", {
-    Title = "Active Skills",
-    Values = {"Q", "E", "R"},
-    Multi = true,
-    Default = {"Q", "E", "R"},
+AutoSkillsTab:CreateDropdown({
+    Name = "Active Skills",
+    Options = {"Q", "E", "R"},
+    CurrentOption = {"Q", "E", "R"},
+    MultipleOptions = true,
+    Flag = "KeyFilter",
     Callback = function(values)
         selectedKeys = {Q = false, E = false, R = false}
         for _, key in ipairs(values) do
@@ -699,98 +694,132 @@ AutoSkillsTab:AddDropdown("KeyFilter", {
     end
 })
 
-AutoSkillsTab:AddToggle("AutoClickToggle", {
-    Title = "Auto Click",
-    Description = "Toggle with F key",
-    Default = false,
+AutoSkillsTab:CreateToggle({
+    Name = "Auto Click",
+    Info = "Toggle with F key",
+    CurrentValue = false,
+    Flag = "AutoClickToggle",
     Callback = toggleAutoClick
 })
 
-AutoSkillsTab:AddSlider("ClickSpeedSlider", {
-    Title = "Click Speed",
-    Min = 0.05,
-    Max = 1,
-    Default = 0.1,
-    Rounding = 2,
-    Callback = function(value) clickDelay = value end
-})
-
--- Auto Farm Tab
-AutoFarmTab:AddDropdown("MobTypeDropdown", {
-    Title = "Mob Type",
-    Description = "Select which mobs to farm",
-    Values = getMobTypes(),
-    Default = nil,
+AutoSkillsTab:CreateSlider({
+    Name = "Click Speed",
+    Info = "Adjust auto click speed",
+    Range = {0.05, 1},
+    Increment = 0.01,
+    CurrentValue = 0.1,
+    Flag = "ClickSpeedSlider",
     Callback = function(value)
-        selectedMobType = value
-        currentTarget = nil
+        clickDelay = value
     end
 })
 
-AutoFarmTab:AddToggle("AutoFarmToggle", {
-    Title = "Enable Auto Farm",
-    Description = "Survives respawns with perfect positioning",
-    Default = false,
+-- Auto Farm Tab
+local mobDropdown
+task.spawn(function()
+    -- Wait for mobs to load
+    repeat
+        mobTypes = getMobTypes()
+        task.wait(1)
+    until #mobTypes > 0
+
+    mobDropdown = AutoFarmTab:CreateDropdown({
+        Name = "Mob Type",
+        Info = "Select which mobs to farm",
+        Options = mobTypes,
+        CurrentOption = nil,
+        Flag = "MobTypeDropdown",
+        Callback = function(value)
+            selectedMobType = value
+            currentTarget = nil
+        end
+    })
+
+    -- Refresh mob types periodically
+    RunService.Heartbeat:Connect(function()
+        local newMobTypes = getMobTypes()
+        if #newMobTypes > 0 and #newMobTypes ~= #mobTypes then
+            mobTypes = newMobTypes
+            mobDropdown:Set(newMobTypes)
+        end
+    end)
+end)
+
+AutoFarmTab:CreateToggle({
+    Name = "Enable Auto Farm",
+    Info = "Survives respawns with perfect positioning",
+    CurrentValue = false,
+    Flag = "AutoFarmToggle",
     Callback = toggleAutoFarm
 })
 
-AutoFarmTab:AddToggle("UseSkills", {
-    Title = "Use Skills While Farming",
-    Default = true,
-    Callback = function(value) useSkillsWhileFarming = value end
+AutoFarmTab:CreateToggle({
+    Name = "Use Skills While Farming",
+    CurrentValue = true,
+    Flag = "UseSkills",
+    Callback = function(value)
+        useSkillsWhileFarming = value
+    end
 })
 
-AutoFarmTab:AddSlider("FarmDelay", {
-    Title = "Action Delay",
-    Min = 0.1,
-    Max = 2,
-    Default = 0.5,
-    Rounding = 1,
-    Callback = function(value) farmDelay = value end
+AutoFarmTab:CreateSlider({
+    Name = "Action Delay",
+    Info = "Delay between farming actions",
+    Range = {0.1, 2},
+    Increment = 0.1,
+    CurrentValue = 0.5,
+    Flag = "FarmDelay",
+    Callback = function(value)
+        farmDelay = value
+    end
 })
 
 -- Auto Raid Tab
-AutoRaidTab:AddDropdown("RaidSelection", {
-    Title = "Raid Selection",
-    Description = "Choose which raid to join",
-    Values = raidOptions,
-    Default = nil,
+AutoRaidTab:CreateDropdown({
+    Name = "Raid Selection",
+    Info = "Choose which raid to join",
+    Options = raidOptions,
+    CurrentOption = nil,
+    Flag = "RaidSelection",
     Callback = function(value)
         selectedRaid = value
     end
 })
 
-AutoRaidTab:AddToggle("HardcoreToggle", {
-    Title = "Hardcore Mode",
-    Default = false,
+AutoRaidTab:CreateToggle({
+    Name = "Hardcore Mode",
+    CurrentValue = false,
+    Flag = "HardcoreToggle",
     Callback = function(value)
         isHardcoreRaid = value
     end
 })
 
-AutoRaidTab:AddButton({
-    Title = "Teleport to Raid",
-    Description = "Join the selected raid",
+AutoRaidTab:CreateButton({
+    Name = "Teleport to Raid",
+    Info = "Join the selected raid",
     Callback = teleportToRaid
 })
 
-AutoRaidTab:AddToggle("AutoRaidToggle", {
-    Title = "Auto Raid",
-    Description = "Teleports every 0.5s & uses skills",
-    Default = false,
+AutoRaidTab:CreateToggle({
+    Name = "Auto Raid",
+    Info = "Teleports every 0.5s & uses skills",
+    CurrentValue = false,
+    Flag = "AutoRaidToggle",
     Callback = toggleAutoRaid
 })
 
 -- Settings Tab
-AutoSettingsTab:AddToggle("AutoExecuteToggle", {
-    Title = "Auto Execute on Teleport",
-    Description = "Automatically re-runs script when changing servers",
-    Default = false,
+AutoSettingsTab:CreateToggle({
+    Name = "Auto Execute on Teleport",
+    Info = "Automatically re-runs script when changing servers",
+    CurrentValue = false,
+    Flag = "AutoExecuteToggle",
     Callback = function(value)
         autoExecute = value
         if value then
             setupAutoExecute()
-            Fluent:Notify({
+            Rayfield:Notify({
                 Title = "Auto Execute",
                 Content = "Script will auto-restart when teleporting",
                 Duration = 3
@@ -799,68 +828,43 @@ AutoSettingsTab:AddToggle("AutoExecuteToggle", {
     end
 })
 
-AutoSettingsTab:AddDropdown("ConfigSelector", {
-    Title = "Configurations",
-    Description = "Select a configuration",
-    Values = configsList,
-    Default = nil,
+local configDropdown = AutoSettingsTab:CreateDropdown({
+    Name = "Configurations",
+    Info = "Select a configuration",
+    Options = configsList,
+    CurrentOption = nil,
+    Flag = "ConfigSelector",
     Callback = function(value)
         selectedConfig = value
     end
 })
 
-AutoSettingsTab:AddButton({
-    Title = "Create New Config",
-    Description = "Save current settings as new config",
-    Callback = function()
-        local input = ""
-        local dialog = Window:Dialog({
-            Title = "Create Config",
-            Content = "Enter config name:",
-            Buttons = {
-                {
-                    Title = "Cancel",
-                    Callback = function()
-                        dialog:Destroy()
-                    end
-                },
-                {
-                    Title = "Save",
-                    Callback = function()
-                        if input and input ~= "" then
-                            saveConfig(input)
-                        else
-                            Fluent:Notify({
-                                Title = "Error",
-                                Content = "Config name cannot be empty!",
-                                Duration = 3
-                            })
-                        end
-                        dialog:Destroy()
-                    end
-                }
-            }
-        })
-        
-        dialog:Textbox({
-            PlaceholderText = "Config name",
-            Callback = function(text)
-                input = text
-            end
-        })
-        
-        dialog:Show()
+AutoSettingsTab:CreateInput({
+    Name = "Create New Config",
+    Info = "Enter config name to save current settings",
+    PlaceholderText = "Config name",
+    Flag = "CreateConfigInput",
+    Callback = function(value)
+        if value and value ~= "" then
+            saveConfig(value)
+        else
+            Rayfield:Notify({
+                Title = "Error",
+                Content = "Config name cannot be empty!",
+                Duration = 3
+            })
+        end
     end
 })
 
-AutoSettingsTab:AddButton({
-    Title = "Overwrite Config",
-    Description = "Update selected config with current settings",
+AutoSettingsTab:CreateButton({
+    Name = "Overwrite Config",
+    Info = "Update selected config with current settings",
     Callback = function()
         if selectedConfig then
             saveConfig(selectedConfig)
         else
-            Fluent:Notify({
+            Rayfield:Notify({
                 Title = "Error",
                 Content = "No config selected!",
                 Duration = 3
@@ -869,14 +873,14 @@ AutoSettingsTab:AddButton({
     end
 })
 
-AutoSettingsTab:AddButton({
-    Title = "Load Config",
-    Description = "Apply selected configuration",
+AutoSettingsTab:CreateButton({
+    Name = "Load Config",
+    Info = "Apply selected configuration",
     Callback = function()
         if selectedConfig then
             loadConfig(selectedConfig)
         else
-            Fluent:Notify({
+            Rayfield:Notify({
                 Title = "Error",
                 Content = "No config selected!",
                 Duration = 3
@@ -885,14 +889,14 @@ AutoSettingsTab:AddButton({
     end
 })
 
-AutoSettingsTab:AddButton({
-    Title = "Delete Config",
-    Description = "Remove selected configuration",
+AutoSettingsTab:CreateButton({
+    Name = "Delete Config",
+    Info = "Remove selected configuration",
     Callback = function()
         if selectedConfig then
             deleteConfig(selectedConfig)
         else
-            Fluent:Notify({
+            Rayfield:Notify({
                 Title = "Error",
                 Content = "No config selected!",
                 Duration = 3
@@ -901,14 +905,15 @@ AutoSettingsTab:AddButton({
     end
 })
 
-AutoSettingsTab:AddToggle("AutoLoadToggle", {
-    Title = "Auto Load Config",
-    Description = "Automatically load selected config on start",
-    Default = false,
+AutoSettingsTab:CreateToggle({
+    Name = "Auto Load Config",
+    Info = "Automatically load selected config on start",
+    CurrentValue = false,
+    Flag = "AutoLoadToggle",
     Callback = function(value)
         autoLoadConfig = value
         if value and selectedConfig then
-            Fluent:Notify({
+            Rayfield:Notify({
                 Title = "Auto Load",
                 Content = "Will auto-load '"..selectedConfig.."' next time",
                 Duration = 3
@@ -931,8 +936,11 @@ if autoLoadConfig and selectedConfig then
 end
 
 -- Initial notification
-Fluent:Notify({
+Rayfield:Notify({
     Title = "RPG Simulator Pro",
-    Content = "Script loaded with full configuration system!",
+    Content = "Script loaded with Rayfield UI!",
     Duration = 5
 })
+
+-- Load Rayfield configuration
+Rayfield:LoadConfiguration()
