@@ -81,7 +81,6 @@ local isHardcoreRaid = false
 local isAutoRaidEnabled = false
 local raidThread = nil
 local currentRaidTarget = nil
-local useSkillsWhileRaiding = true
 
 -- Auto Execute variables
 local isAutoExecuteEnabled = false
@@ -159,43 +158,6 @@ local function getMobTypes()
     return types
 end
 
--- Quest detection function
-local function getQuestNPCs()
-    local questFolder = workspace:FindFirstChild("QuestNPCs")
-    if not questFolder then
-        Fluent:Notify({
-            Title = "Quest Detection",
-            Content = "QuestNPCs folder not found in workspace!",
-            Duration = 5
-        })
-        return {}
-    end
-    
-    local npcs = {}
-    for _, npc in ipairs(questFolder:GetChildren()) do
-        local questIdValue = npc:FindFirstChild("QuestId")
-        if questIdValue and questIdValue:IsA("StringValue") then
-            local questId = questIdValue.Value
-            if questId and questId ~= "" then
-                table.insert(npcs, { Name = npc.Name, QuestId = questId })
-            else
-                Fluent:Notify({
-                    Title = "Quest Detection",
-                    Content = "Empty QuestId for NPC: " .. npc.Name,
-                    Duration = 5
-                })
-            end
-        else
-            Fluent:Notify({
-                Title = "Quest Detection",
-                Content = "No QuestId found for NPC: " .. npc.Name,
-                Duration = 5
-            })
-        end
-    end
-    return npcs
-end
-
 -- Key press simulation
 local function simulateKeyPress(key)
     local keyCodes = {
@@ -225,6 +187,10 @@ local function findMob()
     
     local mobsFolder = workspace:FindFirstChild("Mobs")
     if not mobsFolder then return nil end
+    
+    if currentTarget and currentTarget.Parent and currentTarget:FindFirstChild("Humanoid") and currentTarget.Humanoid.Health > 0 then
+        return currentTarget
+    end
     
     local closestMob = nil
     local closestDistance = math.huge
@@ -338,6 +304,14 @@ local function teleportToRaid()
     end
 end
 
+local function activateAllClickDetectors()
+    for _, detector in ipairs(workspace:GetDescendants()) do
+        if detector:IsA("ClickDetector") then
+            fireclickdetector(detector)
+        end
+    end
+end
+
 local function findClosestRaidMob()
     if not currentHRP or not currentHRP.Parent then return nil end
     
@@ -366,6 +340,8 @@ local function raidLoop()
             task.wait(0.5)
         end
         
+        activateAllClickDetectors()
+        
         local mob = findClosestRaidMob()
         if mob then
             currentRaidTarget = mob
@@ -375,17 +351,15 @@ local function raidLoop()
                 local now = tick()
                 
                 if now - lastTeleport >= 0.5 then
-                    teleportToTarget(mob)
+                    if not teleportToTarget(mob) then
+                        break
+                    end
                     setNoClip(true)
                     lastTeleport = now
                 end
                 
                 autoClick()
-                if useSkillsWhileRaiding then
-                    for _, key in ipairs({"Q", "E", "R"}) do
-                        simulateKeyPress(key)
-                    end
-                end
+                keySpam()
                 
                 task.wait(0.1)
             end
@@ -441,6 +415,43 @@ local function autoClick()
     task.wait(clickDelay)
 end
 
+-- Quest detection function
+local function getQuestNPCs()
+    local questFolder = workspace:FindFirstChild("QuestNPCs")
+    if not questFolder then
+        Fluent:Notify({
+            Title = "Quest Detection",
+            Content = "QuestNPCs folder not found in workspace!",
+            Duration = 5
+        })
+        return {}
+    end
+    
+    local npcs = {}
+    for _, npc in ipairs(questFolder:GetChildren()) do
+        local questIdValue = npc:FindFirstChild("QuestId")
+        if questIdValue and questIdValue:IsA("StringValue") then
+            local questId = questIdValue.Value
+            if questId and questId ~= "" then
+                table.insert(npcs, { Name = npc.Name, QuestId = questId })
+            else
+                Fluent:Notify({
+                    Title = "Quest Detection",
+                    Content = "Empty QuestId for NPC: " .. npc.Name,
+                    Duration = 5
+                })
+            end
+        else
+            Fluent:Notify({
+                Title = "Quest Detection",
+                Content = "No QuestId found for NPC: " .. npc.Name,
+                Duration = 5
+            })
+        end
+    end
+    return npcs
+end
+
 -- Auto Quest function
 local function autoQuestLoop(questId)
     while autoQuestStates[questId] do
@@ -453,20 +464,9 @@ local function autoQuestLoop(questId)
         }
         local zoneQuest = game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("zoneQuest")
         if zoneQuest then
-            local success, err = pcall(function()
+            pcall(function()
                 zoneQuest:FireServer(unpack(args))
             end)
-            Fluent:Notify({
-                Title = "Auto Quest Debug",
-                Content = success and ("Fired quest ID: " .. tostring(questId)) or ("Failed to fire quest ID: " .. tostring(questId) .. " - " .. tostring(err)),
-                Duration = 3
-            })
-        else
-            Fluent:Notify({
-                Title = "Auto Quest Error",
-                Content = "zoneQuest RemoteEvent not found!",
-                Duration = 3
-            })
         end
         
         task.wait(1) -- Delay to prevent server spam
@@ -710,14 +710,6 @@ local function setupUI()
             Default = false,
             Callback = function(value)
                 isHardcoreRaid = value
-            end
-        })
-
-        Tabs.AutoRaid:AddToggle("UseSkillsWhileRaiding", {
-            Title = "Use Skills While Raiding",
-            Default = true,
-            Callback = function(value)
-                useSkillsWhileRaiding = value
             end
         })
 
