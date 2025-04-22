@@ -81,6 +81,9 @@ local isHardcoreRaid = false
 local isAutoRaidEnabled = false
 local raidThread = nil
 local currentRaidTarget = nil
+local platform = nil -- Platform for Masthare fight
+local PLATFORM_HEIGHT = 10 -- Height above ground to keep player
+local PLATFORM_SIZE = Vector3.new(10, 1, 10) -- Size of the platform
 
 -- Auto Execute variables
 local isAutoExecuteEnabled = false
@@ -97,7 +100,7 @@ local autoQuestThreads = {}
 local autoQuestStates = {}
 
 -- Auto Egg Puzzle variables
-local isAutoEggPuzzleEnabled = true
+local isAutoEggPuzzleEnabled = false
 local eggPuzzleThread = nil
 
 -- Initialize black screen in PlayerGui
@@ -401,6 +404,33 @@ local function findClosestRaidMob()
     return closestMob
 end
 
+local function createPlatform()
+    -- Destroy existing platform if it exists
+    if platform then
+        platform:Destroy()
+        platform = nil
+    end
+    
+    -- Create a new platform
+    platform = Instance.new("Part")
+    platform.Name = "MastharePlatform"
+    platform.Size = PLATFORM_SIZE
+    platform.Position = Vector3.new(0, -1000, 0) -- Start off-screen to avoid flickering
+    platform.Anchored = true -- Anchor to prevent falling
+    platform.CanCollide = true -- Allow the player to stand on it
+    platform.Transparency = 0.5 -- Make it slightly transparent for visibility
+    platform.BrickColor = BrickColor.new("Bright blue") -- Visual distinction
+    platform.Parent = workspace
+end
+
+local function updatePlatformPosition()
+    if not platform or not currentHRP or not currentHRP.Parent then return end
+    
+    -- Position the platform directly below the player's HumanoidRootPart
+    local playerPos = currentHRP.Position
+    platform.Position = Vector3.new(playerPos.X, playerPos.Y - PLATFORM_HEIGHT, playerPos.Z)
+end
+
 local function raidLoop()
     while isAutoRaidEnabled do
         while not currentHRP or not currentHRP.Parent do
@@ -413,11 +443,30 @@ local function raidLoop()
         if mob then
             currentRaidTarget = mob
             
+            -- Check if the mob is Masthare
+            local isMasthare = mob.Name == "Masthare"
+            if isMasthare and not platform then
+                createPlatform()
+                Fluent:Notify({
+                    Title = "Auto Raid",
+                    Content = "Detected Masthare! Platform created.",
+                    Duration = 3
+                })
+            elseif not isMasthare and platform then
+                platform:Destroy()
+                platform = nil
+            end
+            
             while isAutoRaidEnabled and mob.Parent and mob:FindFirstChildOfClass("Humanoid") and mob.Humanoid.Health > 0 do
                 if not teleportToTarget(mob) then
                     break
                 end
                 setNoClip(true)
+                
+                -- Update platform position if fighting Masthare
+                if isMasthare then
+                    updatePlatformPosition()
+                end
                 
                 -- Perform auto click
                 simulateMouseClick()
@@ -434,6 +483,11 @@ local function raidLoop()
             
             task.wait(0.5)
         else
+            -- Destroy platform if no mob is targeted
+            if platform then
+                platform:Destroy()
+                platform = nil
+            end
             task.wait(1)
         end
     end
@@ -464,6 +518,12 @@ local function stopRaid()
     end
     setNoClip(false)
     currentRaidTarget = nil
+    
+    -- Clean up platform when stopping Auto Raid
+    if platform then
+        platform:Destroy()
+        platform = nil
+    end
 end
 
 -- Auto Quest function
