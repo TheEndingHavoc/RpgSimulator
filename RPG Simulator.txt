@@ -97,7 +97,7 @@ local autoQuestThreads = {}
 local autoQuestStates = {}
 
 -- Auto Egg Puzzle variables
-local isAutoEggPuzzleEnabled = false
+local isAutoEggPuzzleEnabled = true
 local eggPuzzleThread = nil
 
 -- Initialize black screen in PlayerGui
