@@ -96,6 +96,10 @@ local blackScreenGui = nil
 local autoQuestThreads = {}
 local autoQuestStates = {}
 
+-- Auto Egg Puzzle variables
+local isAutoEggPuzzleEnabled = false
+local eggPuzzleThread = nil
+
 -- Initialize black screen in PlayerGui
 local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 if not playerGui:FindFirstChild("BlackoutScreenGui_Arise") then
@@ -517,6 +521,64 @@ local function toggleAutoQuest(questId, enabled)
     end
 end
 
+-- Auto Egg Puzzle function
+local function autoEggPuzzleLoop()
+    while isAutoEggPuzzleEnabled do
+        -- Check if the puzzle UI exists
+        local puzzleFrame = player.PlayerGui:FindFirstChild("L") and 
+                           player.PlayerGui.L:FindFirstChild("Frame") and 
+                           player.PlayerGui.L.Frame:FindFirstChild("Spawn")
+        
+        if puzzleFrame and puzzleFrame.Visible then
+            -- Find all direct TextButton children in the Spawn frame
+            for _, child in ipairs(puzzleFrame:GetChildren()) do
+                if child:IsA("TextButton") then
+                    -- Simulate clicking the button
+                    pcall(function()
+                        -- Simulate a mouse click at the button's position
+                        local absolutePos = child.AbsolutePosition
+                        local absoluteSize = child.AbsoluteSize
+                        local clickPosX = absolutePos.X + absoluteSize.X / 2
+                        local clickPosY = absolutePos.Y + absoluteSize.Y / 2
+                        VirtualInputManager:SendMouseButtonEvent(clickPosX, clickPosY, 0, true, game, 0)
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(clickPosX, clickPosY, 0, false, game, 0)
+                    end)
+                end
+            end
+            task.wait(0.1) -- Small delay to avoid overloading the server
+        else
+            task.wait(0.5) -- Check less frequently when the puzzle isn't active
+        end
+    end
+end
+
+local function toggleAutoEggPuzzle(enabled)
+    isAutoEggPuzzleEnabled = enabled
+    if enabled then
+        if eggPuzzleThread then
+            coroutine.close(eggPuzzleThread)
+        end
+        eggPuzzleThread = coroutine.create(autoEggPuzzleLoop)
+        coroutine.resume(eggPuzzleThread)
+        Fluent:Notify({
+            Title = "Auto Egg Puzzle",
+            Content = "Enabled! Will automatically solve egg puzzles.",
+            Duration = 3
+        })
+    else
+        if eggPuzzleThread then
+            coroutine.close(eggPuzzleThread)
+            eggPuzzleThread = nil
+        end
+        Fluent:Notify({
+            Title = "Auto Egg Puzzle",
+            Content = "Disabled.",
+            Duration = 3
+        })
+    end
+end
+
 -- Auto Skills function
 local function keySpam()
     local currentKey = keySequence[currentKeyIndex]
@@ -810,7 +872,6 @@ local function setupUI()
         })
     end)
 
-    -- Quests Tab
     pcall(function()
         local questNPCs = {}
         local maxAttempts = 10
@@ -869,6 +930,13 @@ local function setupUI()
             Description = "Turns screen black to improve performance",
             Default = false,
             Callback = toggleBlackScreen
+        })
+
+        Tabs.Settings:AddToggle("AutoEggPuzzleToggle", {
+            Title = "Auto Egg Puzzle",
+            Description = "Automatically solves the egg puzzle when stunned",
+            Default = false,
+            Callback = toggleAutoEggPuzzle
         })
 
         SaveManager:SetLibrary(Fluent)
