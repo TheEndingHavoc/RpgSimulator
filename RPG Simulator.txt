@@ -15,8 +15,8 @@ local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 local currentHRP = nil -- Will track current HumanoidRootPart
 
--- GitHub URL for the script (replace with your actual GitHub URL)
-local SCRIPT_URL = "https://raw.githubusercontent.com/TheEndingHavoc/RpgSimulator/refs/heads/main/RPG%20Simulator.txt"
+-- GitHub URL for the script
+local SCRIPT_URL = "https://raw.githubusercontent.com/TheEndingHavoc/RpgTest2/refs/heads/main/RpgSimTest.txt"
 
 -- Check for existing GUI and destroy it
 if CoreGui:FindFirstChild("RPGSimulatorProWindow") then
@@ -43,7 +43,6 @@ local Tabs = {
     AutoSkills = Window:AddTab({ Title = "Auto Skills", Icon = "sword" }),
     AutoFarm = Window:AddTab({ Title = "Auto Farm", Icon = "anchor" }),
     AutoRaid = Window:AddTab({ Title = "Auto Raid", Icon = "skull" }),
-    Quests = Window:AddTab({ Title = "Quests", Icon = "book" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
@@ -88,9 +87,32 @@ local autoExecuteGui = Instance.new("ScreenGui")
 autoExecuteGui.Name = "AutoExecuteGUI"
 autoExecuteGui.Parent = CoreGui
 
--- Auto Quest variables
-local autoQuestThreads = {}
-local autoQuestStates = {}
+-- Black Screen variables
+local isBlackScreenEnabled = false
+local blackScreenGui = nil
+
+-- Initialize black screen in PlayerGui
+local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+if not playerGui:FindFirstChild("BlackoutScreenGui_Arise") then
+    blackScreenGui = Instance.new("ScreenGui")
+    blackScreenGui.Name = "BlackoutScreenGui_Arise"
+    blackScreenGui.ResetOnSpawn = false
+    blackScreenGui.IgnoreGuiInset = true
+    blackScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local blackoutFrame = Instance.new("Frame")
+    blackoutFrame.Name = "BlackoutFrame"
+    blackoutFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+    blackoutFrame.BorderColor3 = Color3.new(0, 0, 0)
+    blackoutFrame.BorderSizePixel = 0
+    blackoutFrame.Size = UDim2.new(1, 0, 1, 0)
+    blackoutFrame.Position = UDim2.new(0, 0, 0, 0)
+    blackoutFrame.Visible = false 
+    blackoutFrame.ZIndex = 1000
+    blackoutFrame.Parent = blackScreenGui
+
+    blackScreenGui.Parent = playerGui
+end
 
 -- Permanent noclip function
 local function setNoClip(enabled)
@@ -104,11 +126,9 @@ end
 
 -- Character management
 local function trackCharacter(newCharacter)
-    -- Wait for HumanoidRootPart to exist
     local hrp = newCharacter:WaitForChild("HumanoidRootPart")
     currentHRP = hrp
     
-    -- Set up death detection
     local humanoid = newCharacter:WaitForChild("Humanoid")
     humanoid.Died:Connect(function()
         if isAutoFarmEnabled then
@@ -415,87 +435,52 @@ local function autoClick()
     task.wait(clickDelay)
 end
 
--- Quest detection function
-local function getQuestNPCs()
-    local questFolder = workspace:FindFirstChild("QuestNPCs")
-    if not questFolder then
-        Fluent:Notify({
-            Title = "Quest Detection",
-            Content = "QuestNPCs folder not found in workspace!",
-            Duration = 5
-        })
-        return {}
-    end
-    
-    local npcs = {}
-    for _, npc in ipairs(questFolder:GetChildren()) do
-        local questIdValue = npc:FindFirstChild("QuestId")
-        if questIdValue and questIdValue:IsA("StringValue") then
-            local questId = questIdValue.Value
-            if questId and questId ~= "" then
-                table.insert(npcs, { Name = npc.Name, QuestId = questId })
-            else
-                Fluent:Notify({
-                    Title = "Quest Detection",
-                    Content = "Empty QuestId for NPC: " .. npc.Name,
-                    Duration = 5
-                })
-            end
-        else
-            Fluent:Notify({
-                Title = "Quest Detection",
-                Content = "No QuestId found for NPC: " .. npc.Name,
-                Duration = 5
-            })
-        end
-    end
-    return npcs
-end
+-- Black Screen function
+local function toggleBlackScreen(enabled)
+    isBlackScreenEnabled = enabled
 
--- Auto Quest function
-local function autoQuestLoop(questId)
-    while autoQuestStates[questId] do
-        while not currentHRP or not currentHRP.Parent do
-            task.wait(1)
-        end
-        
-        local args = {
-            [1] = questId
-        }
-        local zoneQuest = game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("zoneQuest")
-        if zoneQuest then
-            pcall(function()
-                zoneQuest:FireServer(unpack(args))
-            end)
-        end
-        
-        task.wait(1) -- Delay to prevent server spam
-    end
-end
+    if not blackScreenGui or not blackScreenGui.Parent then
+        local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+        blackScreenGui = Instance.new("ScreenGui")
+        blackScreenGui.Name = "BlackoutScreenGui_Arise"
+        blackScreenGui.ResetOnSpawn = false
+        blackScreenGui.IgnoreGuiInset = true
+        blackScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-local function toggleAutoQuest(questId, enabled)
-    autoQuestStates[questId] = enabled
+        local blackoutFrame = Instance.new("Frame")
+        blackoutFrame.Name = "BlackoutFrame"
+        blackoutFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+        blackoutFrame.BorderColor3 = Color3.new(0, 0, 0)
+        blackoutFrame.BorderSizePixel = 0
+        blackoutFrame.Size = UDim2.new(1, 0, 1, 0)
+        blackoutFrame.Position = UDim2.new(0, 0, 0, 0)
+        blackoutFrame.Visible = false 
+        blackoutFrame.ZIndex = 1000
+        blackoutFrame.Parent = blackScreenGui
+
+        blackScreenGui.Parent = playerGui
+    end
+
+    local frame = blackScreenGui and blackScreenGui:FindFirstChild("BlackoutFrame")
+
     if enabled then
-        if autoQuestThreads[questId] then
-            coroutine.close(autoQuestThreads[questId])
+        if frame then
+            frame.Visible = true
         end
-        autoQuestThreads[questId] = coroutine.create(function()
-            autoQuestLoop(questId)
-        end)
-        coroutine.resume(autoQuestThreads[questId])
+        pcall(game:GetService("RunService").Set3dRenderingEnabled, game:GetService("RunService"), false)
         Fluent:Notify({
-            Title = "Auto Quest",
-            Content = "Auto Quest for " .. tostring(questId) .. " enabled!",
+            Title = "Black Screen",
+            Content = "Enabled! Screen is now black to improve performance.",
             Duration = 3
         })
     else
-        if autoQuestThreads[questId] then
-            coroutine.close(autoQuestThreads[questId])
-            autoQuestThreads[questId] = nil
+        if frame then
+            frame.Visible = false
         end
+        pcall(game:GetService("RunService").Set3dRenderingEnabled, game:GetService("RunService"), true)
         Fluent:Notify({
-            Title = "Auto Quest",
-            Content = "Auto Quest for " .. tostring(questId) .. " disabled.",
+            Title = "Black Screen",
+            Content = "Disabled! Screen is now visible.",
             Duration = 3
         })
     end
@@ -548,7 +533,7 @@ end
 -- Auto Execute Logic
 local function executeMainScript()
     if player:FindFirstChild("ScriptExecuted") then
-        return false -- Prevent duplicate execution in the same session
+        return false
     end
 
     Fluent:Notify({
@@ -615,10 +600,8 @@ end
 
 -- UI Setup with Error Handling and Delay
 local function setupUI()
-    -- Add a small delay to ensure Fluent is fully loaded
     task.wait(0.5)
 
-    -- Auto Skills Tab
     pcall(function()
         Tabs.AutoSkills:AddToggle("AutoSkillsToggle", {
             Title = "Auto Skills",
@@ -662,7 +645,6 @@ local function setupUI()
         })
     end)
 
-    -- Auto Farm Tab
     pcall(function()
         Tabs.AutoFarm:AddToggle("AutoFarmToggle", {
             Title = "Enable Auto Farm",
@@ -692,7 +674,6 @@ local function setupUI()
         })
     end)
 
-    -- Auto Raid Tab
     pcall(function()
         Tabs.AutoRaid:AddDropdown("RaidSelection", {
             Title = "Raid Selection",
@@ -727,39 +708,6 @@ local function setupUI()
         })
     end)
 
-    -- Quests Tab
-    pcall(function()
-        local questNPCs = {}
-        local maxAttempts = 10
-        local attempt = 1
-        repeat
-            questNPCs = getQuestNPCs()
-            if #questNPCs == 0 then
-                task.wait(1)
-                attempt = attempt + 1
-            end
-        until #questNPCs > 0 or attempt > maxAttempts
-
-        if #questNPCs == 0 then
-            Tabs.Quests:AddParagraph({
-                Title = "No Quests Found",
-                Content = "No quest NPCs found in workspace.QuestNPCs after " .. maxAttempts .. " attempts."
-            })
-        else
-            for _, npc in ipairs(questNPCs) do
-                Tabs.Quests:AddToggle("AutoQuestToggle_" .. npc.Name, {
-                    Title = "Auto Quest: " .. npc.Name,
-                    Description = "Automatically runs quest ID: " .. tostring(npc.QuestId),
-                    Default = false,
-                    Callback = function(enabled)
-                        toggleAutoQuest(npc.QuestId, enabled)
-                    end
-                })
-            end
-        end
-    end)
-
-    -- Settings Tab
     pcall(function()
         Tabs.Settings:AddToggle("AutoExecuteToggle", {
             Title = "Auto Execute on Teleport",
@@ -782,7 +730,13 @@ local function setupUI()
             end
         })
 
-        -- SaveManager Configuration Section
+        Tabs.Settings:AddToggle("BlackScreenToggle", {
+            Title = "Black Screen",
+            Description = "Turns screen black to improve performance",
+            Default = false,
+            Callback = toggleBlackScreen
+        })
+
         SaveManager:SetLibrary(Fluent)
         InterfaceManager:SetLibrary(Fluent)
         SaveManager:IgnoreThemeSettings()
