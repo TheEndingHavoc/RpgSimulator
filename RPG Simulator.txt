@@ -43,6 +43,7 @@ local Tabs = {
     AutoSkills = Window:AddTab({ Title = "Auto Skills", Icon = "sword" }),
     AutoFarm = Window:AddTab({ Title = "Auto Farm", Icon = "anchor" }),
     AutoRaid = Window:AddTab({ Title = "Auto Raid", Icon = "skull" }),
+    Quests = Window:AddTab({ Title = "Auto Quest", Icon = "book" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
@@ -90,6 +91,10 @@ autoExecuteGui.Parent = CoreGui
 -- Black Screen variables
 local isBlackScreenEnabled = false
 local blackScreenGui = nil
+
+-- Auto Quest variables
+local autoQuestThreads = {}
+local autoQuestStates = {}
 
 -- Initialize black screen in PlayerGui
 local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
@@ -176,6 +181,43 @@ local function getMobTypes()
         end
     end
     return types
+end
+
+-- Quest detection function
+local function getQuestNPCs()
+    local questFolder = workspace:FindFirstChild("QuestNPCs")
+    if not questFolder then
+        Fluent:Notify({
+            Title = "Quest Detection",
+            Content = "QuestNPCs folder not found in workspace!",
+            Duration = 5
+        })
+        return {}
+    end
+    
+    local npcs = {}
+    for _, npc in ipairs(questFolder:GetChildren()) do
+        local questIdValue = npc:FindFirstChild("QuestId")
+        if questIdValue and questIdValue:IsA("StringValue") then
+            local questId = questIdValue.Value
+            if questId and questId ~= "" then
+                table.insert(npcs, { Name = npc.Name, QuestId = questId })
+            else
+                Fluent:Notify({
+                    Title = "Quest Detection",
+                    Content = "Empty QuestId for NPC: " .. npc.Name,
+                    Duration = 5
+                })
+            end
+        else
+            Fluent:Notify({
+                Title = "Quest Detection",
+                Content = "No QuestId found for NPC: " .. npc.Name,
+                Duration = 5
+            })
+        end
+    end
+    return npcs
 end
 
 -- Key press simulation
@@ -295,7 +337,7 @@ local function stopFarming()
     currentTarget = nil
 end
 
--- Auto Raid functions (Copied from the outdated script)
+-- Auto Raid functions
 local function getNil(name, class)
     for _, v in pairs(getnilinstances()) do
         if v.ClassName == class and v.Name == name then return v end
@@ -418,6 +460,61 @@ local function stopRaid()
     end
     setNoClip(false)
     currentRaidTarget = nil
+end
+
+-- Auto Quest function
+local function autoQuestLoop(questId)
+    while autoQuestStates[questId] do
+        while not currentHRP or not currentHRP.Parent do
+            task.wait(1)
+        end
+        
+        local args = {
+            [1] = questId
+        }
+        local zoneQuest = game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("zoneQuest")
+        if zoneQuest then
+            pcall(function()
+                zoneQuest:FireServer(unpack(args))
+            end)
+        else
+            Fluent:Notify({
+                Title = "Auto Quest Error",
+                Content = "zoneQuest RemoteEvent not found!",
+                Duration = 3
+            })
+        end
+        
+        task.wait(1) -- Delay to prevent server spam
+    end
+end
+
+local function toggleAutoQuest(questId, enabled)
+    autoQuestStates[questId] = enabled
+    if enabled then
+        if autoQuestThreads[questId] then
+            coroutine.close(autoQuestThreads[questId])
+        end
+        autoQuestThreads[questId] = coroutine.create(function()
+            autoQuestLoop(questId)
+        end)
+        coroutine.resume(autoQuestThreads[questId])
+        Fluent:Notify({
+            Title = "Auto Quest",
+            Content = "Auto Quest for " .. tostring(questId) .. " enabled!",
+            Duration = 3
+        })
+    else
+        if autoQuestThreads[questId] then
+            coroutine.close(autoQuestThreads[questId])
+            autoQuestThreads[questId] = nil
+        end
+        Fluent:Notify({
+            Title = "Auto Quest",
+            Content = "Auto Quest for " .. tostring(questId) .. " disabled.",
+            Duration = 3
+        })
+    end
 end
 
 -- Auto Skills function
@@ -711,6 +808,38 @@ local function setupUI()
             Default = false,
             Callback = toggleAutoRaid
         })
+    end)
+
+    -- Quests Tab
+    pcall(function()
+        local questNPCs = {}
+        local maxAttempts = 10
+        local attempt = 1
+        repeat
+            questNPCs = getQuestNPCs()
+            if #questNPCs == 0 then
+                task.wait(1)
+                attempt = attempt + 1
+            end
+        until #questNPCs > 0 or attempt > maxAttempts
+
+        if #questNPCs == 0 then
+            Tabs.Quests:AddParagraph({
+                Title = "No Quests Found",
+                Content = "No quest NPCs found in workspace.QuestNPCs after " .. maxAttempts .. " attempts."
+            })
+        else
+            for _, npc in ipairs(questNPCs) do
+                Tabs.Quests:AddToggle("AutoQuestToggle_" .. npc.Name, {
+                    Title = "Auto Quest: " .. npc.Name,
+                    Description = "Automatically runs quest ID: " .. tostring(npc.QuestId),
+                    Default = false,
+                    Callback = function(enabled)
+                        toggleAutoQuest(npc.QuestId, enabled)
+                    end
+                })
+            end
+        end
     end)
 
     pcall(function()
