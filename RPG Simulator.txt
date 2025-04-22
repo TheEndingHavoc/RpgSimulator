@@ -230,7 +230,7 @@ end
 
 -- Precise teleport function
 local function teleportToTarget(target)
-    if not currentHRP or not currentHRP.Parent then return end
+    if not currentHRP or not currentHRP.Parent then return false end
     
     local targetPos = target.HumanoidRootPart.Position
     currentHRP.CFrame = CFrame.new(targetPos)
@@ -238,6 +238,7 @@ local function teleportToTarget(target)
     currentHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
     
     RunService.Heartbeat:Wait()
+    return true
 end
 
 -- Main farming function
@@ -294,7 +295,7 @@ local function stopFarming()
     currentTarget = nil
 end
 
--- Auto Raid functions
+-- Auto Raid functions (Copied from the outdated script)
 local function getNil(name, class)
     for _, v in pairs(getnilinstances()) do
         if v.ClassName == class and v.Name == name then return v end
@@ -366,20 +367,21 @@ local function raidLoop()
         if mob then
             currentRaidTarget = mob
             
-            local lastTeleport = 0
             while isAutoRaidEnabled and mob.Parent and mob:FindFirstChildOfClass("Humanoid") and mob.Humanoid.Health > 0 do
-                local now = tick()
-                
-                if now - lastTeleport >= 0.5 then
-                    if not teleportToTarget(mob) then
-                        break
-                    end
-                    setNoClip(true)
-                    lastTeleport = now
+                if not teleportToTarget(mob) then
+                    break
                 end
+                setNoClip(true)
                 
-                autoClick()
-                keySpam()
+                -- Perform auto click
+                simulateMouseClick()
+                
+                -- Perform auto skills
+                for _, key in ipairs(keySequence) do
+                    if selectedKeys[key] then
+                        simulateKeyPress(key)
+                    end
+                end
                 
                 task.wait(0.1)
             end
@@ -492,6 +494,9 @@ local keyConnection, clickConnection
 local function toggleKeySpam(enabled)
     isAutoSkillsEnabled = enabled
     if enabled then
+        if keyConnection then
+            keyConnection:Disconnect()
+        end
         keyConnection = RunService.Heartbeat:Connect(keySpam)
     elseif keyConnection then
         keyConnection:Disconnect()
@@ -702,7 +707,7 @@ local function setupUI()
 
         Tabs.AutoRaid:AddToggle("AutoRaidToggle", {
             Title = "Auto Raid",
-            Description = "Teleports every 0.5s & uses skills",
+            Description = "Teleports every 0.5s & uses skills automatically",
             Default = false,
             Callback = toggleAutoRaid
         })
