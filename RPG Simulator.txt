@@ -86,12 +86,12 @@ local PLATFORM_HEIGHT = 5 -- Height above the boss's HumanoidRootPart
 local PLATFORM_SIZE = Vector3.new(10, 1, 10) -- Size of the platform
 local platformBosses = {
     "Pirate Captain", "Obsidian Dragon", "Deep Sea Angler", "Shadow Knight",
-    "Sol Slayer of Stars", "Vint", "Poison Master", "Crystal Queen",
+    "Sol, Slayer of Stars", "Vint", "Poison Master", "Crystal Queen",
     "Kralos", "Zetrox", "Shade", "Priestess of the Colossals",
     "Azure Flame God of the Colossals", "Bone Collector", "Blade, the Vampire King",
     "Hades", "Hades (True Form)", "Toxins Droid IV", "Robot Mech",
-    "Future Vint", "Hive Queen", "Shadow Warlock", "Sura Shadow", "Rune King",
-    "Masthare", "Ice King", "Crystal Ice", "Frost Dragon"
+    "Future Vint", "Hive Queen", "Shadow Warlock", "Sun's Shadow", "Rune King",
+    "Masthare", "Ice King"
 }
 local blacklistedMobs = {"Damage Egg"} -- Mobs to ignore during Auto Raid
 
