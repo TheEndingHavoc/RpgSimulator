@@ -81,9 +81,19 @@ local isHardcoreRaid = false
 local isAutoRaidEnabled = false
 local raidThread = nil
 local currentRaidTarget = nil
-local platform = nil -- Platform for Masthare fight
-local PLATFORM_HEIGHT = 10 -- Height above ground to keep player
+local platform = nil -- Platform for specific bosses
+local PLATFORM_HEIGHT = 5 -- Height above the boss's HumanoidRootPart
 local PLATFORM_SIZE = Vector3.new(10, 1, 10) -- Size of the platform
+local platformBosses = {
+    "Pirate Captain", "Obsidian Dragon", "Deep Sea Angler", "Shadow Knight",
+    "Sol Slayer of Stars", "Vint", "Poison Master", "Crystal Queen",
+    "Kralos", "Zetrox", "Shade", "Priestess of the Colossals",
+    "Azure Flame God of the Colossals", "Bone Collector", "Blade, the Vampire King",
+    "Hades", "Hades (True Form)", "Toxins Droid IV", "Robot Mech",
+    "Future Vint", "Hive Queen", "Shadow Warlock", "Sura Shadow", "Rune King",
+    "Masthare", "Ice King"
+}
+local blacklistedMobs = {"Damage Egg"} -- Mobs to ignore during Auto Raid
 
 -- Auto Execute variables
 local isAutoExecuteEnabled = false
@@ -281,8 +291,19 @@ end
 local function teleportToTarget(target)
     if not currentHRP or not currentHRP.Parent then return false end
     
-    local targetPos = target.HumanoidRootPart.Position
-    currentHRP.CFrame = CFrame.new(targetPos)
+    -- Check if we're fighting a boss that requires a platform
+    local requiresPlatform = table.find(platformBosses, target.Name) and platform and platform.Parent
+    if requiresPlatform then
+        -- Teleport to the platform's position, slightly above it
+        local platformPos = platform.Position
+        local playerPos = Vector3.new(platformPos.X, platformPos.Y + (platform.Size.Y / 2) + 3, platformPos.Z)
+        currentHRP.CFrame = CFrame.new(playerPos)
+    else
+        -- Default teleport behavior for other mobs
+        local targetPos = target.HumanoidRootPart.Position
+        currentHRP.CFrame = CFrame.new(targetPos)
+    end
+    
     currentHRP.Velocity = Vector3.new(0, 0, 0)
     currentHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
     
@@ -391,6 +412,10 @@ local function findClosestRaidMob()
     local mobsFolder = workspace:FindFirstChild("Mobs")
     if mobsFolder then
         for _, mob in ipairs(mobsFolder:GetChildren()) do
+            -- Skip blacklisted mobs
+            if table.find(blacklistedMobs, mob.Name) then
+                continue
+            end
             if mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChildOfClass("Humanoid") and mob.Humanoid.Health > 0 then
                 local distance = (mob.HumanoidRootPart.Position - currentHRP.Position).Magnitude
                 if distance < closestDistance then
@@ -404,18 +429,19 @@ local function findClosestRaidMob()
     return closestMob
 end
 
-local function createPlatform()
+local function createPlatform(bossHRP)
     -- Destroy existing platform if it exists
     if platform then
         platform:Destroy()
         platform = nil
     end
     
-    -- Create a new platform
+    -- Create a new platform positioned above the boss's HumanoidRootPart
     platform = Instance.new("Part")
-    platform.Name = "MastharePlatform"
+    platform.Name = "BossPlatform"
     platform.Size = PLATFORM_SIZE
-    platform.Position = Vector3.new(0, -1000, 0) -- Start off-screen to avoid flickering
+    local bossPos = bossHRP.Position
+    platform.Position = Vector3.new(bossPos.X, bossPos.Y + PLATFORM_HEIGHT, bossPos.Z)
     platform.Anchored = true -- Anchor to prevent falling
     platform.CanCollide = true -- Allow the player to stand on it
     platform.Transparency = 0.5 -- Make it slightly transparent for visibility
@@ -423,12 +449,12 @@ local function createPlatform()
     platform.Parent = workspace
 end
 
-local function updatePlatformPosition()
-    if not platform or not currentHRP or not currentHRP.Parent then return end
+local function updatePlatformPosition(bossHRP)
+    if not platform or not bossHRP or not bossHRP.Parent then return end
     
-    -- Position the platform directly below the player's HumanoidRootPart
-    local playerPos = currentHRP.Position
-    platform.Position = Vector3.new(playerPos.X, playerPos.Y - PLATFORM_HEIGHT, playerPos.Z)
+    -- Update the platform's position to follow the boss's HumanoidRootPart
+    local bossPos = bossHRP.Position
+    platform.Position = Vector3.new(bossPos.X, bossPos.Y + PLATFORM_HEIGHT, bossPos.Z)
 end
 
 local function raidLoop()
@@ -443,16 +469,19 @@ local function raidLoop()
         if mob then
             currentRaidTarget = mob
             
-            -- Check if the mob is Masthare
-            local isMasthare = mob.Name == "Masthare"
-            if isMasthare and not platform then
-                createPlatform()
-                Fluent:Notify({
-                    Title = "Auto Raid",
-                    Content = "Detected Masthare! Platform created.",
-                    Duration = 3
-                })
-            elseif not isMasthare and platform then
+            -- Check if the mob is one of the bosses requiring a platform
+            local requiresPlatform = table.find(platformBosses, mob.Name)
+            if requiresPlatform then
+                -- Create or recreate the platform if it doesn't exist
+                if not platform or not platform.Parent then
+                    createPlatform(mob.HumanoidRootPart)
+                    Fluent:Notify({
+                        Title = "Auto Raid",
+                        Content = "Detected " .. mob.Name .. "! Platform created.",
+                        Duration = 3
+                    })
+                end
+            elseif not requiresPlatform and platform then
                 platform:Destroy()
                 platform = nil
             end
@@ -463,9 +492,9 @@ local function raidLoop()
                 end
                 setNoClip(true)
                 
-                -- Update platform position if fighting Masthare
-                if isMasthare then
-                    updatePlatformPosition()
+                -- Update platform position if fighting a boss that requires it
+                if requiresPlatform then
+                    updatePlatformPosition(mob.HumanoidRootPart)
                 end
                 
                 -- Perform auto click
@@ -590,23 +619,48 @@ local function autoEggPuzzleLoop()
                            player.PlayerGui.L.Frame:FindFirstChild("Spawn")
         
         if puzzleFrame and puzzleFrame.Visible then
-            -- Find all direct TextButton children in the Spawn frame
-            for _, child in ipairs(puzzleFrame:GetChildren()) do
-                if child:IsA("TextButton") then
-                    -- Simulate clicking the button
-                    pcall(function()
-                        -- Simulate a mouse click at the button's position
-                        local absolutePos = child.AbsolutePosition
-                        local absoluteSize = child.AbsoluteSize
-                        local clickPosX = absolutePos.X + absoluteSize.X / 2
-                        local clickPosY = absolutePos.Y + absoluteSize.Y / 2
-                        VirtualInputManager:SendMouseButtonEvent(clickPosX, clickPosY, 0, true, game, 0)
-                        task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(clickPosX, clickPosY, 0, false, game, 0)
-                    end)
-                end
+            -- Store the current states of Auto Click and Auto Skills
+            local wasAutoClickEnabled = isAutoClickEnabled
+            local wasAutoSkillsEnabled = isAutoSkillsEnabled
+            
+            -- Disable Auto Click and Auto Skills while solving the puzzle
+            if wasAutoClickEnabled then
+                toggleAutoClick(false)
             end
-            task.wait(0.1) -- Small delay to avoid overloading the server
+            if wasAutoSkillsEnabled then
+                toggleKeySpam(false)
+            end
+            
+            -- Solve the puzzle
+            while puzzleFrame and puzzleFrame.Visible and isAutoEggPuzzleEnabled do
+                for _, child in ipairs(puzzleFrame:GetChildren()) do
+                    if child:IsA("TextButton") then
+                        -- Simulate clicking the button
+                        pcall(function()
+                            local absolutePos = child.AbsolutePosition
+                            local absoluteSize = child.AbsoluteSize
+                            local clickPosX = absolutePos.X + absoluteSize.X / 2
+                            local clickPosY = absolutePos.Y + absoluteSize.Y / 2
+                            VirtualInputManager:SendMouseButtonEvent(clickPosX, clickPosY, 0, true, game, 0)
+                            task.wait(0.05)
+                            VirtualInputManager:SendMouseButtonEvent(clickPosX, clickPosY, 0, false, game, 0)
+                        end)
+                    end
+                end
+                task.wait(0.1) -- Small delay to avoid overloading the server
+                -- Re-check puzzleFrame visibility
+                puzzleFrame = player.PlayerGui:FindFirstChild("L") and 
+                             player.PlayerGui.L:FindFirstChild("Frame") and 
+                             player.PlayerGui.L.Frame:FindFirstChild("Spawn")
+            end
+            
+            -- Restore Auto Click and Auto Skills to their previous states
+            if wasAutoClickEnabled then
+                toggleAutoClick(true)
+            end
+            if wasAutoSkillsEnabled then
+                toggleKeySpam(true)
+            end
         else
             task.wait(0.5) -- Check less frequently when the puzzle isn't active
         end
@@ -934,7 +988,7 @@ local function setupUI()
 
     pcall(function()
         local questNPCs = {}
-        local maxAttempts = 10
+        local maxAttempts = 2 -- Reduced from 10 to 2 attempts
         local attempt = 1
         repeat
             questNPCs = getQuestNPCs()
