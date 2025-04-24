@@ -91,7 +91,7 @@ local platformBosses = {
     "Azure Flame God of the Colossals", "Bone Collector", "Blade, the Vampire King",
     "Hades", "Hades (True Form)", "Toxins Droid IV", "Robot Mech",
     "Future Vint", "Hive Queen", "Shadow Warlock", "Sura Shadow", "Rune King",
-    "Masthare", "Ice King"
+    "Masthare", "Ice King", "Crystal Ice", "Frost Dragon"
 }
 local blacklistedMobs = {"Damage Egg"} -- Mobs to ignore during Auto Raid
 
